@@ -1,0 +1,30 @@
+site_name: tileable
+repo_url: https://github.com/psiace/tileable
+site_url: https://tileable.dev
+site_description: The modular framework for your ideas. Create. Combine. Repeat.
+site_author: Chojan Shang
+edit_uri: edit/main/docs/
+repo_name: psiace/tileable
+copyright: Maintained by <a href="https://github.com/psiace">psiace</a>.
+
+nav:
+  - Home: index.md
+  - Examples: examples.md
+  - Modules: modules.md
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: ["src/tileable"]
+theme:
+  name: terminal
+  palette:
+    primary: teal
+    accent: lime
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
