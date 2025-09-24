@@ -1,4 +1,5 @@
 """Plugin integration powered by :mod:`pluggy`."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -26,7 +27,9 @@ class HookSpecs:
         raise NotImplementedError
 
     @hookspec
-    def tile_shutdown(self, ctx: Any, tile: Any, error: BaseException | None) -> None:  # pragma: no cover - executed via Pluggy
+    def tile_shutdown(
+        self, ctx: Any, tile: Any, error: BaseException | None
+    ) -> None:  # pragma: no cover - executed via Pluggy
         """Run after a tile executes, regardless of success."""
         raise NotImplementedError
 

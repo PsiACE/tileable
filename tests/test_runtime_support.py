@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from tileable.plugins import TilePluginManager, hookimpl
 from tileable.registry import TileRegistry
@@ -46,4 +46,4 @@ def test_plugin_iter_tiles_yields_unique_tiles() -> None:
     # Registering again should not produce duplicates in registry refresh logic
     registry.register(DoublerTile)
     manager.register(ExamplePlugin())
-    assert list(manager.iter_tiles())[0] is DoublerTile
+    assert next(iter(manager.iter_tiles())) is DoublerTile

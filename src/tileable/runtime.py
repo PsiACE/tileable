@@ -1,8 +1,10 @@
 """Execution helpers for running tiles."""
+
 from __future__ import annotations
 
 import inspect
-from typing import Any, Mapping, MutableMapping, Tuple, TypeAlias, TypeVar
+from collections.abc import Mapping, MutableMapping
+from typing import Any, TypeVar
 
 from .context import TileContext
 from .errors import TileExecutionError, TileRegistrationError
@@ -11,7 +13,7 @@ from .plugins import TilePluginManager
 from .registry import TileRegistry
 from .tile import Tile
 
-TileRef: TypeAlias = str | type[Tile[Any, Any]] | Tile[Any, Any]
+type TileRef = str | type[Tile[Any, Any]] | Tile[Any, Any]
 PayloadT = TypeVar("PayloadT", bound=Any)
 ResultT = TypeVar("ResultT", bound=Any)
 
@@ -27,7 +29,7 @@ def get_plugins() -> TilePluginManager:
     return _default_plugins
 
 
-def _coerce_tile(tile: TileRef, registry: TileRegistry) -> Tuple[type[Tile[Any, Any]], Tile[Any, Any]]:
+def _coerce_tile(tile: TileRef, registry: TileRegistry) -> tuple[type[Tile[Any, Any]], Tile[Any, Any]]:
     if isinstance(tile, Tile):
         return type(tile), tile
     if isinstance(tile, str):
@@ -35,7 +37,7 @@ def _coerce_tile(tile: TileRef, registry: TileRegistry) -> Tuple[type[Tile[Any, 
         return tile_cls, tile_cls()
     if inspect.isclass(tile) and issubclass(tile, Tile):
         return tile, tile()
-    raise TileRegistrationError(f"Unsupported tile reference: {tile!r}")
+    raise TileRegistrationError.unsupported_reference(tile)
 
 
 def _prepare_context(

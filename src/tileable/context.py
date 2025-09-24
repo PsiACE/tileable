@@ -1,8 +1,10 @@
 """Execution context injected into every tile instance."""
+
 from __future__ import annotations
 
+from collections.abc import Mapping, MutableMapping
 from types import MappingProxyType
-from typing import Any, Mapping, MutableMapping
+from typing import Any
 
 from .events import EventBus
 
@@ -48,7 +50,7 @@ class TileContext:
         try:
             return self._services[name]
         except KeyError as exc:  # pragma: no cover - defensive path
-            raise KeyError(f"Service '{name}' is not available") from exc
+            raise KeyError(name) from exc
 
     def get_service_or(self, name: str, default: Any | None = None) -> Any | None:
         """Return a service if available, otherwise ``default``."""

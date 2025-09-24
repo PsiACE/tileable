@@ -1,11 +1,11 @@
 """Event bus abstraction built on top of :mod:`blinker`."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
 from typing import Any
 
 from blinker import Namespace
-
 
 STANDARD_EVENTS = (
     "runtime.started",

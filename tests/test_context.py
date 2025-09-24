@@ -25,8 +25,10 @@ def test_context_exposes_services_and_state() -> None:
 def test_context_get_service_raises_with_message() -> None:
     ctx = TileContext(event_bus=EventBus())
 
-    with pytest.raises(KeyError, match="Service 'db' is not available"):
+    with pytest.raises(KeyError) as exc_info:
         ctx.get_service("db")
+
+    assert exc_info.value.args == ("db",)
 
 
 def test_context_emit_proxies_to_bus() -> None:

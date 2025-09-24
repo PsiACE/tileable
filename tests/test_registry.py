@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from tileable.registry import TileRecord, TileRegistry
-from tileable.tile import Tile
-from tileable.schema import TilePayload, TileResult
 from tileable.errors import TileLookupError, TileRegistrationError
+from tileable.registry import TileRecord, TileRegistry
+from tileable.schema import TilePayload, TileResult
+from tileable.tile import Tile
 
 
 class Payload(TilePayload):
@@ -54,7 +54,7 @@ def test_registry_rejects_invalid_tiles() -> None:
             return Result(doubled=payload.value)
 
     with pytest.raises(TileRegistrationError):
-        registry.register(NO_TILE := type("NotATile", (), {}))  # type: ignore[arg-type]
+        registry.register(type("NotATile", (), {}))  # type: ignore[arg-type]
 
     with pytest.raises(TileRegistrationError):
         registry.register(NoNameTile)

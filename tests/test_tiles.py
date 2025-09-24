@@ -6,20 +6,20 @@ from typing import cast
 
 import pytest
 
+from examples import run_greeting
 from tileable import (
     EventBus,
+    PluginError,
     Tile,
     TileExecutionError,
     TilePayload,
     TilePluginManager,
     TileRegistry,
     TileResult,
-    PluginError,
+    ainvoke_tile,
     hookimpl,
     invoke_tile,
-    ainvoke_tile,
 )
-from examples import run_greeting
 
 
 class EchoPayload(TilePayload):
@@ -58,6 +58,7 @@ def test_invoke_tile_by_name_with_services_and_events(registry: TileRegistry) ->
     calls: list[tuple[str, dict[str, object]]] = []
 
     for event in ("tile.started", "tile.completed", "tile.debug"):
+
         def handler(sender: str, **data: object) -> None:
             calls.append((sender, data))
 
@@ -89,6 +90,7 @@ def test_invoke_tile_wraps_exceptions() -> None:
     registry.register(BoomTile)
     bus = EventBus()
     errors: list[BaseException] = []
+
     def failure_handler(sender: str, **data: object) -> None:
         error = cast(BaseException, data["error"])
         errors.append(error)
@@ -120,7 +122,7 @@ class AsyncTile(Tile[AsyncPayload, AsyncResult]):
         return AsyncResult(doubled=payload.value * 2)
 
     def execute(self, payload: AsyncPayload) -> AsyncResult:  # pragma: no cover
-        raise RuntimeError("execute should not be used for AsyncTile")
+        raise RuntimeError
 
 
 @pytest.mark.asyncio()
@@ -178,6 +180,7 @@ async def test_async_plugins_share_state() -> None:
     counts: defaultdict[str, int] = defaultdict(int)
     bus = EventBus()
     for event in ("tile.started", "tile.completed"):
+
         def handler(sender: str, *, _evt=event, **data: object) -> None:
             counts[_evt] += 1
 
@@ -203,7 +206,7 @@ class FailingPlugin:
 
     @hookimpl
     def tile_startup(self, ctx, tile):
-        raise RuntimeError("startup failed")
+        raise RuntimeError
 
 
 def test_plugin_startup_failure_emits_runtime_stopped(registry: TileRegistry) -> None:
@@ -213,6 +216,7 @@ def test_plugin_startup_failure_emits_runtime_stopped(registry: TileRegistry) ->
     observed: list[str] = []
 
     for name in ("runtime.started", "runtime.stopped"):
+
         def handler(sender: str, *, _evt=name, **_: object) -> None:
             observed.append(_evt)
 

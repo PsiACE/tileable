@@ -1,18 +1,16 @@
 """Tile base class that powers every piece of functionality."""
+
 from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from typing import ClassVar, Generic, TypeVar
+from typing import ClassVar
 
 from .context import TileContext
 from .schema import TilePayload, TileResult
 
-PayloadT = TypeVar("PayloadT", bound=TilePayload)
-ResultT = TypeVar("ResultT", bound=TileResult)
 
-
-class Tile(Generic[PayloadT, ResultT], ABC):
+class Tile[PayloadT: TilePayload, ResultT: TileResult](ABC):
     """Base class to implement custom tiles.
 
     Subclasses should define a unique ``name`` and implement ``execute``. When
@@ -29,10 +27,7 @@ class Tile(Generic[PayloadT, ResultT], ABC):
     @property
     def context(self) -> TileContext:
         if self._context is None:
-            msg = (
-                "Tile context is not attached. Pass `context=` when instantiating "
-                "or use `invoke_tile`."
-            )
+            msg = "Tile context is not attached. Pass `context=` when instantiating or use `invoke_tile`."
             raise RuntimeError(msg)
         return self._context
 

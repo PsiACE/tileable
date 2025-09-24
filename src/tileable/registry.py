@@ -1,8 +1,10 @@
 """Tile registry keeping track of available tile classes."""
+
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable
+from typing import Any
 
 from .errors import TileLookupError, TileRegistrationError
 from .tile import Tile
@@ -22,16 +24,16 @@ class TileRegistry:
     """Central registry for tile classes."""
 
     def __init__(self) -> None:
-        self._tiles: Dict[str, TileRecord] = {}
+        self._tiles: dict[str, TileRecord] = {}
 
     def register(self, tile_cls: type[Tile[Any, Any]], *, source: str | None = None) -> None:
         if not issubclass(tile_cls, Tile):
-            raise TileRegistrationError(f"{tile_cls!r} is not a Tile subclass")
+            raise TileRegistrationError.not_subclass(tile_cls)
         name = getattr(tile_cls, "name", None)
         if not name:
-            raise TileRegistrationError(f"Tile class {tile_cls.__name__} is missing the 'name' attribute")
+            raise TileRegistrationError.missing_name(tile_cls)
         if name in self._tiles:
-            raise TileRegistrationError(f"Tile '{name}' is already registered")
+            raise TileRegistrationError.duplicate(name)
         description = getattr(tile_cls, "description", None)
         self._tiles[name] = TileRecord(name=name, tile_cls=tile_cls, description=description, source=source)
 
@@ -43,13 +45,13 @@ class TileRegistry:
         try:
             return self._tiles[name].tile_cls
         except KeyError as exc:
-            raise TileLookupError(f"Tile '{name}' is not registered") from exc
+            raise TileLookupError.missing(name) from exc
 
     def info(self, name: str) -> TileRecord:
         try:
             return self._tiles[name]
         except KeyError as exc:
-            raise TileLookupError(f"Tile '{name}' is not registered") from exc
+            raise TileLookupError.missing(name) from exc
 
     def list(self) -> list[TileRecord]:
         return list(self._tiles.values())

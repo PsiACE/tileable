@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from examples.greeting import GreetingPayload, GreetingResult, run_greeting, showcase
+from examples.greeting import GreetingResult, run_greeting, showcase
 
 
 def test_run_greeting_uses_explicit_prefix() -> None:

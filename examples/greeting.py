@@ -1,7 +1,8 @@
 """Greeting tile example demonstrating the Tileable workflow."""
+
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from tileable import (
     EventBus,
