@@ -53,14 +53,20 @@ def _prepare_context(
 
 
 def _refresh_registry_from_plugins(registry: TileRegistry, plugins: TilePluginManager) -> None:
+    errors: list[TileRegistrationError] = []
     for tile_cls in plugins.iter_tiles():
         name = getattr(tile_cls, "name", None)
         if name and name in registry:
             continue
         try:
             registry.register(tile_cls, source=getattr(tile_cls, "__module__", None))
-        except TileRegistrationError:
-            continue
+        except TileRegistrationError as exc:
+            errors.append(exc)
+    if errors:
+        if len(errors) == 1:
+            raise errors[0]
+        message = "; ".join(str(err) for err in errors)
+        raise TileRegistrationError(message)
 
 
 def _resolve_invocation(
@@ -111,9 +117,18 @@ def _complete_invocation(
     event_bus: EventBus,
     plugins: TilePluginManager,
 ) -> Any:
-    event_bus.emit("tile.completed", tile=tile_cls.name, payload=payload, result=result)
-    plugins.shutdown(ctx=ctx, tile=tile_obj, error=None)
-    return result
+    shutdown_error: Exception | None = None
+    try:
+        plugins.shutdown(ctx=ctx, tile=tile_obj, error=None)
+    except Exception as exc:
+        shutdown_error = exc
+
+    if shutdown_error is None:
+        event_bus.emit("tile.completed", tile=tile_cls.name, payload=payload, result=result)
+        return result
+
+    event_bus.emit("tile.failed", tile=tile_cls.name, payload=payload, error=shutdown_error)
+    raise TileExecutionError(tile_cls.name, payload, shutdown_error) from shutdown_error
 
 
 def _handle_execution_failure(
@@ -126,8 +141,18 @@ def _handle_execution_failure(
     plugins: TilePluginManager,
     error: Exception,
 ) -> None:
-    event_bus.emit("tile.failed", tile=tile_cls.name, payload=payload, error=error)
-    plugins.shutdown(ctx=ctx, tile=tile_obj, error=error)
+    shutdown_error: Exception | None = None
+    try:
+        plugins.shutdown(ctx=ctx, tile=tile_obj, error=error)
+    except Exception as exc:
+        shutdown_error = exc
+
+    final_error = shutdown_error or error
+    event_bus.emit("tile.failed", tile=tile_cls.name, payload=payload, error=final_error)
+
+    if shutdown_error is not None:
+        raise TileExecutionError(tile_cls.name, payload, shutdown_error) from error
+
     raise TileExecutionError(tile_cls.name, payload, error) from error
 
 
