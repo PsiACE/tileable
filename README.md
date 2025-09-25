@@ -5,80 +5,112 @@
 [![Commit activity](https://img.shields.io/github/commit-activity/m/psiace/tileable)](https://img.shields.io/github/commit-activity/m/psiace/tileable)
 [![License](https://img.shields.io/github/license/psiace/tileable)](https://img.shields.io/github/license/psiace/tileable)
 
-Tileable is a Python 3.12+ framework for building modular, event-driven workflows out of tiny, well-typed “tiles”. It emphasises clarity (KISS), internal reuse, and complete testability.
+Tileable is a Python 3.12+ framework for composing event-driven workflows from small, typed “tiles”. It keeps ergonomics, observability, and testability front and centre.
 
-- **Repository**: <https://github.com/psiace/tileable/>
-- **Documentation**: <https://tileable.dev/>
-- **Runnable demos**: `examples/` (`python -m examples.greeting`)
+## Quickstart
 
-## Design Principles
-- **Predictable primitives** — Tiles are simple classes with explicit payload/result models.
-- **Runtime ergonomics** — The registry, event bus, and plugin manager do the wiring so you can compose tiles rapidly.
-- **State you can trust** — Service injection and per-run state live on a strongly-typed context object.
-- **Observability first** — Every run emits lifecycle events that you can subscribe to or persist.
+```bash
+make install          # set up the uv environment + pre-commit hooks
+python -m examples.greeting
+```
 
-## Quick Tour
+Example output:
 
-All docs and tests reference the executable example in `examples/greeting.py`. The snippet below can be run as-is:
+```text
+[debug] {'tile': 'greeting', 'message': 'Tileable'}
+Hi, Tileable!
+runs=1
+```
+
+Prefer a REPL? The demo tile is wired exactly like production code:
 
 ```python
-from examples.greeting import GreetingPayload, GreetingPlugin, GreetingTile, showcase
+from examples.greeting import GreetingPayload, GreetingPlugin, showcase
 from tileable import EventBus, TilePluginManager, TileRegistry, invoke_tile
 
-# 1. Observe the plugin-driven workflow shipped with the library
+# Discover tiles via the bundled plugin
 result, debug_events, state = showcase(message="Tileable")
-print(debug_events)  # [{'tile': 'greeting', 'message': 'Tileable'}]
-print(result.response)  # "Hi, Tileable!"
-print(state["runs"])   # 1
 
-# 2. Assemble the same components manually
+# Or assemble the pieces manually
 registry = TileRegistry()
 plugins = TilePluginManager()
 plugins.register(GreetingPlugin())
-
 bus = EventBus()
-bus.subscribe("tile.debug", lambda sender, **payload: print("debug", payload))
+state = {"runs": 0}
 
-invoke_tile(
-    "greeting",
-    GreetingPayload(message="Operator"),
-    registry=registry,
-    plugins=plugins,
-    event_bus=bus,
-)
+with bus.record() as lifecycle:
+    result = invoke_tile(
+        "greeting",
+        GreetingPayload(message="Operator"),
+        registry=registry,
+        plugins=plugins,
+        event_bus=bus,
+        state=state,
+    )
+
+print(result.response)
+print(lifecycle.payloads("tile.debug"))
+print(state["runs"])
 ```
 
-Runtime flow:
-1. The plugin contributes `GreetingTile` via `tile_specs` and seeds services/state in `tile_startup`.
-2. `invoke_tile` resolves the tile, attaches a `TileContext`, and emits `runtime.*` / `tile.*` events.
-3. The event bus surfaces debug payloads while the tile returns a strongly typed result.
-4. Lifecycle hooks keep context and state aligned, even when exceptions occur.
+## Why tiles feel good
+- **Predictable primitives** — A tile is just a tiny class with typed payload/result models.
+- **Observability first** — `EventBus.record()` captures lifecycle events without throwaway subscribers.
+- **State you can trust** — Services and per-run state live on `TileContext`, keeping plugins and tiles aligned.
+- **Plugins without pain** — `TilePluginManager` contributes tiles, startup hooks, and shutdown hooks on demand.
 
-## Core Concepts
-- **Tile** — Subclass `tileable.Tile` and implement `execute` (and optionally `aexecute`).
-- **TileContext** — Automatically injected context exposing services, state, and `emit`.
-- **TileRegistry** — Tracks available tiles and resolves string references.
-- **EventBus** — Lightweight blinker-backed pub/sub for runtime monitoring.
-- **TilePluginManager** — Pluggy integration for discovering tiles or reacting to lifecycle events.
+## Build, observe, extend
 
-## Develop with Confidence
+**Run tiles and capture context**
 
-> Tileable requires Python 3.12+. Verify with `python --version` before syncing.
+```python
+from tileable import invoke_tile
+
+result, ctx = invoke_tile(
+    "greeting",
+    GreetingPayload(message="Developer"),
+    return_context=True,
+)
+
+print(result.response)
+print(dict(ctx.services))      # services added during execution
+print(ctx.state.get("runs"))
+```
+
+**Scope runtime state for tests**
+
+```python
+from tileable import scoped_runtime, TileRegistry
+
+with scoped_runtime(registry=TileRegistry()):
+    ...  # run tiles without touching the global defaults
+```
+
+**Listen in when you need full control**
+
+```python
+bus = EventBus()
+
+unsubscribe = bus.subscribe("tile.failed", lambda sender, **payload: print(payload))
+invoke_tile(..., event_bus=bus)
+unsubscribe()
+```
+
+## Quality gates
 
 ```bash
-make install   # create uv environment + pre-commit hooks
-make check     # lint, type-check, dependency hygiene
-make test      # pytest (sync, async, doctests)
-tox -e py312,py313  # matrix verification
-uv run mkdocs serve # docs preview at http://localhost:8000
+make check    # ruff lint + formatter, ty type-checking, deptry hygiene
+make test     # pytest (sync + async paths and doctests)
+tox -e py312,py313  # interpreter matrix + coverage xml
 ```
 
-CI expects lint + test green before merge. Pre-commit hooks (`uv run pre-commit run -a`) keep formatting consistent.
+CI expects these commands to pass before merging. Pre-commit hooks (`uv run pre-commit run -a`) keep formatting aligned.
 
-## Learn More
-- Read the full guide: <https://tileable.dev/>
-- Explore runnable samples in `examples/`
-- Consult `AGENTS.md` for contributor expectations and workflows.
+## Learn more
+- Full documentation: <https://tileable.dev/>
+- Additional demos: `examples/`
+- Advanced recipes: `docs/advanced.md`
+- Contributor handbook: `AGENTS.md`
 
 ---
 

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Iterator, Mapping, MutableMapping
+from contextlib import contextmanager
 from typing import Any, TypeVar
 
 from .context import TileContext
-from .errors import TileExecutionError, TileRegistrationError
-from .events import EventBus, get_event_bus
+from .errors import TileExecutionError, TileRegistrationAggregateError, TileRegistrationError
+from .events import EventBus, get_event_bus, reset_event_bus, set_event_bus
 from .plugins import TilePluginManager
 from .registry import TileRegistry
 from .tile import Tile
@@ -53,14 +54,35 @@ def _prepare_context(
 
 
 def _refresh_registry_from_plugins(registry: TileRegistry, plugins: TilePluginManager) -> None:
+    candidates: list[type[Tile[Any, Any]]] = []
+    errors: list[TileRegistrationError] = []
+    seen: set[str] = set()
+
     for tile_cls in plugins.iter_tiles():
         name = getattr(tile_cls, "name", None)
-        if name and name in registry:
+        if not name:
+            errors.append(TileRegistrationError.missing_name(tile_cls))
             continue
-        try:
-            registry.register(tile_cls, source=getattr(tile_cls, "__module__", None))
-        except TileRegistrationError:
+        if name in seen:
+            errors.append(TileRegistrationError.duplicate(name))
             continue
+        if name in registry:
+            existing = registry.info(name)
+            contribution_source = getattr(tile_cls, "__module__", None)
+            if existing.tile_cls is not tile_cls or existing.source != contribution_source:
+                errors.append(TileRegistrationError.duplicate(name))
+            continue
+        if not issubclass(tile_cls, Tile):
+            errors.append(TileRegistrationError.not_subclass(tile_cls))
+            continue
+        candidates.append(tile_cls)
+        seen.add(name)
+
+    if errors:
+        raise (errors[0] if len(errors) == 1 else TileRegistrationAggregateError(errors))
+
+    for tile_cls in candidates:
+        registry.register(tile_cls, source=getattr(tile_cls, "__module__", None))
 
 
 def _resolve_invocation(
@@ -111,9 +133,24 @@ def _complete_invocation(
     event_bus: EventBus,
     plugins: TilePluginManager,
 ) -> Any:
-    event_bus.emit("tile.completed", tile=tile_cls.name, payload=payload, result=result)
-    plugins.shutdown(ctx=ctx, tile=tile_obj, error=None)
-    return result
+    shutdown_error: Exception | None = None
+    try:
+        plugins.shutdown(ctx=ctx, tile=tile_obj, error=None)
+    except Exception as exc:
+        shutdown_error = exc
+
+    if shutdown_error is None:
+        event_bus.emit("tile.completed", tile=tile_cls.name, payload=payload, result=result)
+        return result
+
+    event_bus.emit(
+        "tile.failed",
+        tile=tile_cls.name,
+        payload=payload,
+        error=shutdown_error,
+        phase="shutdown",
+    )
+    raise TileExecutionError(tile_cls.name, payload, shutdown_error) from shutdown_error
 
 
 def _handle_execution_failure(
@@ -126,9 +163,76 @@ def _handle_execution_failure(
     plugins: TilePluginManager,
     error: Exception,
 ) -> None:
-    event_bus.emit("tile.failed", tile=tile_cls.name, payload=payload, error=error)
-    plugins.shutdown(ctx=ctx, tile=tile_obj, error=error)
+    shutdown_error: Exception | None = None
+    try:
+        plugins.shutdown(ctx=ctx, tile=tile_obj, error=error)
+    except Exception as exc:
+        shutdown_error = exc
+
+    final_error = shutdown_error or error
+    phase = "shutdown" if shutdown_error is not None else "execute"
+    event_bus.emit(
+        "tile.failed",
+        tile=tile_cls.name,
+        payload=payload,
+        error=final_error,
+        phase=phase,
+        original_error=error if shutdown_error is not None else None,
+    )
+
+    if shutdown_error is not None:
+        raise TileExecutionError(tile_cls.name, payload, shutdown_error) from error
+
     raise TileExecutionError(tile_cls.name, payload, error) from error
+
+
+def set_registry(registry: TileRegistry) -> None:
+    global _default_registry
+    _default_registry = registry
+
+
+def reset_registry() -> None:
+    set_registry(TileRegistry())
+
+
+def set_plugins(plugins: TilePluginManager) -> None:
+    global _default_plugins
+    _default_plugins = plugins
+
+
+def reset_plugins() -> None:
+    set_plugins(TilePluginManager())
+
+
+def reset_runtime_defaults() -> None:
+    reset_registry()
+    reset_plugins()
+    reset_event_bus()
+
+
+@contextmanager
+def scoped_runtime(
+    *,
+    registry: TileRegistry | None = None,
+    plugins: TilePluginManager | None = None,
+    event_bus: EventBus | None = None,
+) -> Iterator[None]:
+    previous_registry = get_registry()
+    previous_plugins = get_plugins()
+    previous_bus = get_event_bus()
+
+    try:
+        if registry is not None:
+            set_registry(registry)
+        if plugins is not None:
+            set_plugins(plugins)
+        if event_bus is not None:
+            set_event_bus(event_bus)
+        yield
+    finally:
+        set_registry(previous_registry)
+        set_plugins(previous_plugins)
+        set_event_bus(previous_bus)
 
 
 def _finalize_invocation(
@@ -153,6 +257,7 @@ def invoke_tile(
     plugins: TilePluginManager | None = None,
     services: Mapping[str, Any] | None = None,
     state: MutableMapping[str, Any] | None = None,
+    return_context: bool = False,
 ) -> Any:
     """Execute ``tile`` synchronously and return the result."""
 
@@ -191,7 +296,7 @@ def invoke_tile(
             error=exc,
         )
     else:
-        return _complete_invocation(
+        completed = _complete_invocation(
             tile_cls=tile_cls,
             tile_obj=tile_obj,
             payload=payload,
@@ -200,6 +305,7 @@ def invoke_tile(
             event_bus=resolved_bus,
             plugins=resolved_plugins,
         )
+        return (completed, ctx) if return_context else completed
     finally:
         _finalize_invocation(
             tile_cls=tile_cls,
@@ -219,6 +325,7 @@ async def ainvoke_tile(
     plugins: TilePluginManager | None = None,
     services: Mapping[str, Any] | None = None,
     state: MutableMapping[str, Any] | None = None,
+    return_context: bool = False,
 ) -> Any:
     """Async counterpart to :func:`invoke_tile`."""
 
@@ -257,7 +364,7 @@ async def ainvoke_tile(
             error=exc,
         )
     else:
-        return _complete_invocation(
+        completed = _complete_invocation(
             tile_cls=tile_cls,
             tile_obj=tile_obj,
             payload=payload,
@@ -266,6 +373,7 @@ async def ainvoke_tile(
             event_bus=resolved_bus,
             plugins=resolved_plugins,
         )
+        return (completed, ctx) if return_context else completed
     finally:
         _finalize_invocation(
             tile_cls=tile_cls,

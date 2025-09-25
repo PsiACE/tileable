@@ -73,18 +73,18 @@ def showcase(*, message: str = "Tileable") -> tuple[GreetingResult, list[dict[st
     plugins.register(GreetingPlugin())
 
     bus = EventBus()
-    debug_events: list[dict[str, object]] = []
-    bus.subscribe("tile.debug", lambda sender, **payload: debug_events.append(payload))
-
     state: dict[str, object] = {"runs": 0}
-    result = invoke_tile(
-        "greeting",
-        GreetingPayload(message=message),
-        registry=registry,
-        plugins=plugins,
-        event_bus=bus,
-        state=state,
-    )
+    with bus.record() as events:
+        result = invoke_tile(
+            "greeting",
+            GreetingPayload(message=message),
+            registry=registry,
+            plugins=plugins,
+            event_bus=bus,
+            state=state,
+        )
+
+    debug_events = events.payloads("tile.debug")
     return result, debug_events, state
 
 

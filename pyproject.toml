@@ -1,6 +1,6 @@
 [project]
 name = "tileable"
-version = "0.0.1"
+version = "0.0.2"
 description = "The modular framework for your ideas. Create. Combine. Repeat."
 authors = [{ name = "Chojan Shang", email = "psiace@apace.org" }]
 readme = "README.md"
