@@ -109,6 +109,7 @@ CI expects these commands to pass before merging. Pre-commit hooks (`uv run pre-
 ## Learn more
 - Full documentation: <https://tileable.dev/>
 - Additional demos: `examples/`
+- Advanced recipes: `docs/advanced.md`
 - Contributor handbook: `AGENTS.md`
 
 ---
