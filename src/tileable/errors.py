@@ -29,6 +29,15 @@ class TileRegistrationError(TileError):
         return cls(f"Unsupported tile reference: {ref!r}")
 
 
+class TileRegistrationAggregateError(TileRegistrationError):
+    """Raised when multiple tile registrations fail in a single operation."""
+
+    def __init__(self, errors: list[TileRegistrationError]):
+        message = "; ".join(str(err) for err in errors)
+        super().__init__(message)
+        self.errors = errors
+
+
 class TileLookupError(TileRegistrationError):
     """Raised when a tile name is not present in the registry."""
 

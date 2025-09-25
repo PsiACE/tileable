@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tileable.events import STANDARD_EVENTS, EventBus, get_event_bus
+from tileable.events import STANDARD_EVENTS, CapturedEvent, EventBus, get_event_bus
 
 
 def test_event_bus_subscribe_emit_and_unsubscribe() -> None:
@@ -40,3 +40,37 @@ def test_get_event_bus_returns_singleton() -> None:
     second = get_event_bus()
 
     assert first is second
+
+
+def test_event_bus_record_defaults_and_helpers() -> None:
+    bus = EventBus()
+
+    with bus.record(include_sender=True) as recorder:
+        bus.emit("runtime.started", tile="demo")
+        bus.emit("tile.debug", tile="demo", detail="noop")
+        bus.emit("runtime.stopped", tile="demo")
+
+    assert recorder.events == STANDARD_EVENTS
+    assert len(recorder) == 3
+    debug_payloads = recorder.payloads("tile.debug")
+    assert debug_payloads == [{"tile": "demo", "detail": "noop"}]
+
+    last_debug = recorder.last("tile.debug")
+    assert isinstance(last_debug, CapturedEvent)
+    assert last_debug.sender == "tile.debug"
+
+    recorder.clear()
+    assert len(recorder) == 0
+
+
+def test_event_bus_record_accepts_iterable() -> None:
+    bus = EventBus()
+
+    with bus.record(["first", "second"]) as recorder:
+        bus.emit("first", value=1)
+        bus.emit("ignored", value=2)
+        bus.emit("second", value=3)
+
+    names = [captured.name for captured in recorder.records()]
+    assert names == ["first", "second"]
+    assert recorder.payloads() == [{"value": 1}, {"value": 3}]
