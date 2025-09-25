@@ -1,31 +1,14 @@
 # tileable
 
-Welcome to Tileable, a modular workflow runtime for Python 3.12+ that keeps the developer journey focused on small, observable building blocks.
+Tileable is a modular workflow runtime for Python 3.12+ that keeps developers focused on observable, test-friendly building blocks.
 
-## Experience Goals
-
-- **Start small, scale linearly.** Add one tile at a time without refactoring the world.
-- **Stay observable.** Every execution emits lifecycle events you can log, stream, or test against.
-- **Extend safely.** Plug-ins contribute tiles or lifecycle hooks without bypassing type checks or context guarantees.
-- **Remain async-ready.** Synchronous and asynchronous paths share the same ergonomics.
-
-## Tile Lifecycle at a Glance
-
-1. A `Tile` subclass defines typed payload/result models (`TilePayload`, `TileResult`).
-2. The runtime builds a `TileContext` that exposes services, shared state, and the event bus.
-3. A `TileRegistry` resolves tile references (strings, classes, or instances).
-4. `TilePluginManager` surfaces extra tiles and lifecycle hooks via pluggy.
-5. `invoke_tile` / `ainvoke_tile` orchestrate execution, events, and cleanup.
-
-## Build Your First Tile
-
-Tileable ships with `examples/greeting.py`, a runnable end-to-end demo. Run it to see the full lifecycle:
+## Getting started
 
 ```bash
-python examples/greeting.py
+python -m examples.greeting
 ```
 
-Example output:
+You will see the full lifecycle play out:
 
 ```text
 [debug] {'tile': 'greeting', 'message': 'Tileable'}
@@ -33,48 +16,95 @@ Hi, Tileable!
 runs=1
 ```
 
-The README, documentation, and automated tests all reference the exact same code to keep examples aligned with runtime behavior:
+The example is identical to how you would assemble components in production:
 
 ```python
-from examples.greeting import GreetingPayload, GreetingPlugin, GreetingTile, showcase
+from examples.greeting import GreetingPayload, GreetingPlugin, showcase
 from tileable import EventBus, TilePluginManager, TileRegistry, invoke_tile
 
-# Quick path: reuse the showcase helper
+# Discover tiles via the bundled plugin
 result, debug_events, state = showcase(message="Tileable")
-print(debug_events)
-print(result.response)
-print(state["runs"])
 
-# Manual assembly: registry + plugins + event bus
+# Or compose everything yourself
 registry = TileRegistry()
 plugins = TilePluginManager()
 plugins.register(GreetingPlugin())
-
 bus = EventBus()
-bus.subscribe("tile.debug", lambda sender, **payload: print("debug", payload))
+state = {"runs": 0}
 
-invoke_tile(
-    "greeting",
-    GreetingPayload(message="Operator"),
-    registry=registry,
-    plugins=plugins,
-    event_bus=bus,
-    state={"runs": 0},
-)
+with bus.record() as lifecycle:
+    invoke_tile(
+        "greeting",
+        GreetingPayload(message="Operator"),
+        registry=registry,
+        plugins=plugins,
+        event_bus=bus,
+        state=state,
+    )
+
+print(lifecycle.payloads("tile.debug"))
+print(state["runs"])
 ```
 
-Flow refresher:
-1. The plugin surfaces `GreetingTile` via `tile_specs` and seeds services/state in `tile_startup`.
-2. The runtime attaches a `TileContext`, emitting `runtime.*` and `tile.*` events along the way.
-3. The event bus captures debug payloads, the tile returns a typed result, and state records run counts.
-4. Lifecycle hooks still run on failure, ensuring cleanup.
+## How a tile run works
 
-## Async, Tested, and Documented
-- Switch to `ainvoke_tile` for the same lifecycle with native async execution.
-- Unit tests in `tests/` cover every component and example to guarantee stability.
-- Documentation uses the MkDocs Terminal theme and publishes to <https://tileable.dev>.
+1. A `Tile` subclass defines typed payload/result models (`TilePayload`, `TileResult`).
+2. `invoke_tile` builds a `TileContext` exposing services, state, and `emit`.
+3. `TileRegistry` resolves string/class/instance references.
+4. `TilePluginManager` contributes tiles and lifecycle hooks via pluggy.
+5. `EventBus` broadcasts `runtime.*` and `tile.*` events for instrumentation.
 
-## Next Steps
-- Explore additional scripts under `examples/`.
-- Dive into the API reference via the *Modules* navigation entry.
+## Observe everything
+
+`EventBus.record()` keeps event capture declarative:
+
+```python
+bus = EventBus()
+
+with bus.record() as lifecycle:
+    invoke_tile(..., event_bus=bus)
+
+assert lifecycle.payloads("tile.failed") == []
+```
+
+Need raw subscribers? `bus.subscribe(name, handler)` returns an unsubscribe callback so you can tidy up easily.
+
+## Reach into the context when you need it
+
+Tiles and plugins collaborate via `TileContext`. Opt in to retrieving it by setting `return_context=True`:
+
+```python
+result, ctx = invoke_tile(
+    "greeting",
+    GreetingPayload(message="Developer"),
+    return_context=True,
+)
+
+print(dict(ctx.services))
+print(ctx.state.get("runs"))
+```
+
+During async runs, `ainvoke_tile(..., return_context=True)` behaves the same way.
+
+## Scope runtime state for tests or multi-tenant hosts
+
+```python
+from tileable import scoped_runtime, TilePluginManager, TileRegistry
+
+with scoped_runtime(registry=TileRegistry(), plugins=TilePluginManager()):
+    ...  # run tiles without mutating global defaults
+```
+
+Pair this with dedicated `EventBus` instances to isolate observability per scenario.
+
+## Async, tested, documented
+
+- Switch to `ainvoke_tile` for native async execution—no API drift.
+- Unit tests in `tests/` (plus doctests) keep behaviour locked in.
+- MkDocs drives this site; run `uv run mkdocs serve` for live previews.
+
+## Next steps
+
+- Browse additional demos under `examples/`.
+- Review the API reference via the *Modules* navigation entry.
 - Planning to contribute? Read `AGENTS.md` and `CONTRIBUTING.md`.

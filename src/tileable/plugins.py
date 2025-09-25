@@ -46,16 +46,28 @@ class TilePluginManager:
         return self._manager.hook
 
     def register(self, plugin: Any, name: str | None = None) -> None:
+        if self._manager.is_registered(plugin):
+            raise PluginError("register", ValueError(f"Plugin {plugin!r} is already registered"))
+        if name is not None and self._manager.has_plugin(name):
+            raise PluginError("register", ValueError(f"Plugin name '{name}' is already registered"))
         self._manager.register(plugin, name=name)
 
     def iter_tiles(self) -> Iterable[type]:
+        hook = self._manager.hook.tile_specs
         try:
-            for contribution in self._manager.hook.tile_specs():
-                if contribution is None:
-                    continue
-                yield from contribution
+            contributions = hook()
         except Exception as exc:  # pragma: no cover - defensive path
             raise PluginError("tile_specs", exc) from exc
+
+        implementations = hook.get_hookimpls()
+        for impl, contribution in zip(implementations, contributions, strict=False):
+            if contribution is None:
+                continue
+            if not isinstance(contribution, Iterable):
+                plugin_name = impl.plugin_name or repr(impl.plugin)
+                error = TypeError(f"Plugin {plugin_name} returned non-iterable tile_specs result")
+                raise PluginError("tile_specs", error) from error
+            yield from contribution
 
     def startup(self, *, ctx: Any, tile: Any) -> None:
         try:
