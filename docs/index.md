@@ -1,110 +1,108 @@
-# tileable
+# tileable — Create. Combine. Repeat.
 
-Tileable is a modular workflow runtime for Python 3.12+ that keeps developers focused on observable, test-friendly building blocks.
+Welcome to Tileable: a modular workflow runtime that lets you assemble event-
+driven systems from tiny, testable tiles. The developer experience rotates
+around three verbs:
 
-## Getting started
+1. **Create** small, typed tiles.
+2. **Combine** them with runtime services, context, and events.
+3. **Repeat** the pattern with confidence thanks to observability and tests.
 
-```bash
-python -m examples.greeting
-```
-
-You will see the full lifecycle play out:
-
-```text
-[debug] {'tile': 'greeting', 'message': 'Tileable'}
-Hi, Tileable!
-runs=1
-```
-
-The example is identical to how you would assemble components in production:
+## 1. Create — define a tile
 
 ```python
-from examples.greeting import GreetingPayload, GreetingPlugin, showcase
+from tileable import Tile, TilePayload, TileResult
+
+class GreetingPayload(TilePayload):
+    name: str
+
+class GreetingResult(TileResult):
+    message: str
+
+class GreetingTile(Tile[GreetingPayload, GreetingResult]):
+    name = "greeting"
+
+    def execute(self, payload: GreetingPayload) -> GreetingResult:
+        self.context.emit("tile.debug", tile=self.name, name=payload.name)
+        return GreetingResult(message=f"Hi, {payload.name}!")
+```
+
+## 2. Combine — let the runtime do the wiring
+
+```python
 from tileable import EventBus, TilePluginManager, TileRegistry, invoke_tile
 
-# Discover tiles via the bundled plugin
-result, debug_events, state = showcase(message="Tileable")
-
-# Or compose everything yourself
 registry = TileRegistry()
+registry.register(GreetingTile)
+
 plugins = TilePluginManager()
-plugins.register(GreetingPlugin())
 bus = EventBus()
-state = {"runs": 0}
 
 with bus.record() as lifecycle:
-    invoke_tile(
+    result, ctx = invoke_tile(
         "greeting",
-        GreetingPayload(message="Operator"),
+        GreetingPayload(name="Tileable"),
         registry=registry,
         plugins=plugins,
         event_bus=bus,
-        state=state,
+        return_context=True,
     )
 
+print(result.message)
 print(lifecycle.payloads("tile.debug"))
-print(state["runs"])
-```
-
-## How a tile run works
-
-1. A `Tile` subclass defines typed payload/result models (`TilePayload`, `TileResult`).
-2. `invoke_tile` builds a `TileContext` exposing services, state, and `emit`.
-3. `TileRegistry` resolves string/class/instance references.
-4. `TilePluginManager` contributes tiles and lifecycle hooks via pluggy.
-5. `EventBus` broadcasts `runtime.*` and `tile.*` events for instrumentation.
-
-## Observe everything
-
-`EventBus.record()` keeps event capture declarative:
-
-```python
-bus = EventBus()
-
-with bus.record() as lifecycle:
-    invoke_tile(..., event_bus=bus)
-
-assert lifecycle.payloads("tile.failed") == []
-```
-
-Need raw subscribers? `bus.subscribe(name, handler)` returns an unsubscribe callback so you can tidy up easily.
-
-## Reach into the context when you need it
-
-Tiles and plugins collaborate via `TileContext`. Opt in to retrieving it by setting `return_context=True`:
-
-```python
-result, ctx = invoke_tile(
-    "greeting",
-    GreetingPayload(message="Developer"),
-    return_context=True,
-)
-
 print(dict(ctx.services))
-print(ctx.state.get("runs"))
 ```
 
-During async runs, `ainvoke_tile(..., return_context=True)` behaves the same way.
+### Ergonomics out of the box
 
-## Scope runtime state for tests or multi-tenant hosts
+- `TileContext` injects services, shared state, and the event bus automatically.
+- `EventBus.record()` captures lifecycle payloads without ad-hoc listeners.
+- `scoped_runtime` swaps registries/plugins/bus for a single test or tenant.
+- `invoke_tile(..., return_context=True)` hands back the post-run context when
+  you need to inspect it.
 
-```python
-from tileable import scoped_runtime, TilePluginManager, TileRegistry
+## 3. Repeat — orchestrate and extend
 
-with scoped_runtime(registry=TileRegistry(), plugins=TilePluginManager()):
-    ...  # run tiles without mutating global defaults
+### Event-driven orchestration
+
+`examples/orchestration.py` uses `tileable.contrib.flow.register_event_flow`
+to listen to tile events, branch on results, and aggregate histories across
+fetch/score/notify tiles. The behaviour is verified by `tests/test_examples.py`
+so documentation and runtime stay aligned.
+
+### Contrib tiles
+
+Install optional extras when you want richer behaviour:
+
+```bash
+pip install tileable[logfire]
+pip install tileable[huey]
 ```
 
-Pair this with dedicated `EventBus` instances to isolate observability per scenario.
+- `LogfireObserverTile` + `LogfireObserverPlugin` — telemetry (logs/traces/
+  metrics) with zero boilerplate.
+- `RetryTile` — exponential backoff with `tile.retrying` events.
+- `ReplayTile` — record runs as JSON seeds and replay them later.
+- `HueyDispatchTile` / `HueyWorkerTile` — push work to Huey queues while keeping
+  business tiles untouched.
 
-## Async, tested, documented
+See `docs/contrib.md` and `docs/advanced.md` for complete recipes.
 
-- Switch to `ainvoke_tile` for native async execution—no API drift.
-- Unit tests in `tests/` (plus doctests) keep behaviour locked in.
-- MkDocs drives this site; run `uv run mkdocs serve` for live previews.
+## Quality gates
 
-## Next steps
+```bash
+make check    # linting, type checking, dependency hygiene
+make test     # pytest across sync, async, contrib, orchestration
+```
 
-- Browse additional demos under `examples/`.
-- Review the API reference via the *Modules* navigation entry.
-- Planning to contribute? Read `AGENTS.md` and `CONTRIBUTING.md`.
+CI expects these commands to pass before merging. Pre-commit hooks (`uv run pre-commit run -a`) keep formatting aligned.
+
+## Explore further
+
+- `examples/` — runnable demos including `greeting` and `orchestration`
+- `docs/examples.md` — walkthroughs and testing tips
+- `docs/advanced.md` — context inspection, scoped runtime, multi-tile workflows
+- `docs/contrib.md` — observer, retry, replay, Huey tiles
+- `AGENTS.md` — contributor handbook
+
+The modular framework for your ideas. Create. Combine. Repeat.

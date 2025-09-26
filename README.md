@@ -1,20 +1,24 @@
-# tileable
+# tileable — Create. Combine. Repeat.
 
 [![Release](https://img.shields.io/github/v/release/psiace/tileable)](https://img.shields.io/github/v/release/psiace/tileable)
 [![Build status](https://img.shields.io/github/actions/workflow/status/psiace/tileable/main.yml?branch=main)](https://github.com/psiace/tileable/actions/workflows/main.yml?query=branch%3Amain)
 [![Commit activity](https://img.shields.io/github/commit-activity/m/psiace/tileable)](https://img.shields.io/github/commit-activity/m/psiace/tileable)
 [![License](https://img.shields.io/github/license/psiace/tileable)](https://img.shields.io/github/license/psiace/tileable)
 
-Tileable is a Python 3.12+ framework for composing event-driven workflows from small, typed “tiles”. It keeps ergonomics, observability, and testability front and centre.
+Tileable is a Python 3.12+ runtime for developers who want to assemble modular,
+event-driven workflows out of tiny, typed building blocks. Every tile is just a
+class. Every run is observable. Every composition stays testable. **Create** a
+tile, **combine** it with others, then **repeat** with confidence.
 
-## Quickstart
+## Create — start small
 
 ```bash
 make install          # set up the uv environment + pre-commit hooks
 python -m examples.greeting
 ```
 
-Example output:
+The quick start doubles as a living reference. It fetches a tile, wires it
+through the runtime, and emits lifecycle events:
 
 ```text
 [debug] {'tile': 'greeting', 'message': 'Tileable'}
@@ -22,7 +26,7 @@ Hi, Tileable!
 runs=1
 ```
 
-Prefer a REPL? The demo tile is wired exactly like production code:
+Prefer exploring in a REPL? The example is the same code you will ship:
 
 ```python
 from examples.greeting import GreetingPayload, GreetingPlugin, showcase
@@ -31,12 +35,11 @@ from tileable import EventBus, TilePluginManager, TileRegistry, invoke_tile
 # Discover tiles via the bundled plugin
 result, debug_events, state = showcase(message="Tileable")
 
-# Or assemble the pieces manually
+# Or compose everything yourself
 registry = TileRegistry()
 plugins = TilePluginManager()
 plugins.register(GreetingPlugin())
 bus = EventBus()
-state = {"runs": 0}
 
 with bus.record() as lifecycle:
     result = invoke_tile(
@@ -45,71 +48,70 @@ with bus.record() as lifecycle:
         registry=registry,
         plugins=plugins,
         event_bus=bus,
-        state=state,
+        state={"runs": 0},
     )
 
 print(result.response)
 print(lifecycle.payloads("tile.debug"))
-print(state["runs"])
 ```
 
-## Why tiles feel good
-- **Predictable primitives** — A tile is just a tiny class with typed payload/result models.
-- **Observability first** — `EventBus.record()` captures lifecycle events without throwaway subscribers.
-- **State you can trust** — Services and per-run state live on `TileContext`, keeping plugins and tiles aligned.
-- **Plugins without pain** — `TilePluginManager` contributes tiles, startup hooks, and shutdown hooks on demand.
+## Combine — compose and observe
 
-## Build, observe, extend
-
-**Run tiles and capture context**
-
-```python
-from tileable import invoke_tile
-
-result, ctx = invoke_tile(
-    "greeting",
-    GreetingPayload(message="Developer"),
-    return_context=True,
-)
-
-print(result.response)
-print(dict(ctx.services))      # services added during execution
-print(ctx.state.get("runs"))
-```
-
-**Scope runtime state for tests**
+- **Predictable primitives** — Tiles are plain classes with typed payload/result
+  models. `TileContext` injects services, shared state, and the event bus for you.
+- **Observability first** — `EventBus.record()` captures lifecycle payloads.
+  Prefer callbacks? `bus.subscribe(...)` returns an unsubscribe handle.
+- **Isolation when you need it** — `scoped_runtime` swaps registries, plugins,
+  or the event bus for one test or tenant, then restores previous defaults.
+- **Context on demand** — `invoke_tile(..., return_context=True)` hands back the
+  post-run context so you can inspect services or state snapshots.
 
 ```python
-from tileable import scoped_runtime, TileRegistry
+from tileable import scoped_runtime, invoke_tile, TileRegistry
 
 with scoped_runtime(registry=TileRegistry()):
-    ...  # run tiles without touching the global defaults
+    result, ctx = invoke_tile(
+        "greeting",
+        GreetingPayload(message="Developer"),
+        return_context=True,
+    )
+    print(result.response)
+    print(dict(ctx.services))
 ```
 
-**Listen in when you need full control**
+## Repeat — scale your ideas
 
-```python
-bus = EventBus()
+- **Event-driven orchestration** — `examples/orchestration.py` shows how to
+  use `tileable.contrib.flow.register_event_flow` to listen for tile events,
+  branch based on results, and aggregate run histories. The behaviour is locked
+  in via `tests/test_examples.py`.
+- **Contrib tiles** — Opt into the extras you need:
+  - `LogfireObserverTile` (`pip install tileable[logfire]`) wraps runs with
+    telemetry; pair with `LogfireObserverPlugin` for a zero-boilerplate setup.
+  - `RetryTile` adds exponential backoff policies and emits `tile.retrying`
+    events for observability.
+  - `ReplayTile` records runs as JSON seeds and replays them later to reproduce
+    or fuzz behaviour.
+  - `HueyDispatchTile` / `HueyWorkerTile` (`pip install tileable[huey]`) push
+    work to Huey queues while keeping business tiles untouched.
 
-unsubscribe = bus.subscribe("tile.failed", lambda sender, **payload: print(payload))
-invoke_tile(..., event_bus=bus)
-unsubscribe()
-```
+See `docs/contrib.md` and `docs/advanced.md` for deeper recipes.
 
 ## Quality gates
 
 ```bash
-make check    # ruff lint + formatter, ty type-checking, deptry hygiene
-make test     # pytest (sync + async paths and doctests)
-tox -e py312,py313  # interpreter matrix + coverage xml
+make check    # linting, type-checking, dependency hygiene
+make test     # pytest (sync, async, contrib, orchestration)
+tox -e py312,py313  # interpreter matrix + coverage
 ```
 
 CI expects these commands to pass before merging. Pre-commit hooks (`uv run pre-commit run -a`) keep formatting aligned.
 
 ## Learn more
-- Full documentation: <https://tileable.dev/>
-- Additional demos: `examples/`
+- Documentation & guides: <https://tileable.dev/>
+- Examples: `examples/` (including `examples/orchestration.py`)
 - Advanced recipes: `docs/advanced.md`
+- Contrib reference: `docs/contrib.md`
 - Contributor handbook: `AGENTS.md`
 
 ---

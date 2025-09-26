@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from examples.greeting import GreetingPayload, GreetingPlugin, GreetingResult, run_greeting, showcase
+from examples.orchestration import run_order_pipeline
 from tileable import EventBus, TilePluginManager, TileRegistry, invoke_tile
 
 
@@ -40,3 +41,18 @@ def test_readme_manual_wiring_matches_behavior() -> None:
     assert result.response == "Hi, Operator!"
     assert lifecycle.payloads("tile.debug") == [{"tile": "greeting", "message": "Operator"}]
     assert state["runs"] == 1
+
+
+def test_orchestration_pipeline_branches_and_collects() -> None:
+    summaries = run_order_pipeline([1, 2, 3])
+
+    order_ids = {entry["order_id"] for entry in summaries}
+    assert order_ids == {1, 2, 3}
+
+    for entry in summaries:
+        history_steps = [step["step"] for step in entry["history"]]
+        assert "fetch" in history_steps
+        if entry["segment"] == "vip":
+            assert "score" in history_steps
+        else:
+            assert "score" not in history_steps

@@ -11,6 +11,7 @@ nav:
   - Home: index.md
   - Examples: examples.md
   - Advanced: advanced.md
+  - Contrib: contrib.md
   - Modules: modules.md
 plugins:
   - search
