@@ -21,7 +21,7 @@ class TileContext:
     ) -> None:
         self._event_bus = event_bus
         self._services: dict[str, Any] = dict(services or {})
-        self._state: MutableMapping[str, Any] = state or {}
+        self._state: MutableMapping[str, Any] = state if state is not None else {}
 
     @property
     def event_bus(self) -> EventBus:

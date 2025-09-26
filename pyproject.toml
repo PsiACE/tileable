@@ -20,6 +20,10 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
+[project.optional-dependencies]
+logfire = ["logfire"]
+huey = ["huey"]
+
 [project.urls]
 Homepage = "https://tileable.dev/"
 Repository = "https://github.com/psiace/tileable"

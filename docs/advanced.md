@@ -1,10 +1,13 @@
-# Advanced Usage
+# Advanced Recipes
 
-Ready to go beyond the basics? These recipes lean on Tileable’s core abstractions so you can tackle richer scenarios without leaving the KISS ethos.
+Tileable’s core primitives stay small, but you can layer additional behaviours
+without losing the KISS experience. This page highlights a few patterns that
+keep complex journeys manageable.
 
 ## Inspect execution with `return_context`
 
-`examples/context_inspection.py` shows how to collect services, shared state, and emitted events after a run:
+`examples/context_inspection.py` shows how to export the services, shared state,
+and emitted events after a run:
 
 ```python
 from examples.context_inspection import inspect_context
@@ -17,49 +20,66 @@ print(state["invocations"])    # 1
 print(events)                   # [{'tile': 'audit', 'user': 'agent', 'count': 1}]
 ```
 
-Inside `inspect_context` we:
-
-1. Register a custom `AuditTile` that mutates services/state during execution.
-2. Capture debug events with `with EventBus().record("tile.debug")`.
-3. Call `invoke_tile(..., return_context=True)` and surface a snapshot of the context.
-
-You get the full execution footprint when you need it, while the default ergonomics stay minimal.
+The helper captures events via `EventBus.record()`, takes shallow copies of
+services/state, and returns everything for debugging or assertions. The example
+is exercised in `tests/test_advanced_examples.py` so behaviour stays aligned.
 
 ## Isolate runtime state with `scoped_runtime`
 
-Need to swap out the global registry or plugin manager temporarily? `examples/scoped_isolation.py` keeps things contained:
+Need to override the default registry or plugin manager temporarily? Use the
+scoped runtime helper, as in `examples/scoped_isolation.py`:
 
 ```python
 from examples.scoped_isolation import run_in_isolation
 
-print(run_in_isolation("Tenant"))
-# Hi, Tenant!
+response = run_in_isolation("Tenant")
+print(response)  # Hi, Tenant!
 ```
 
-The pattern is straightforward:
-
-1. Create dedicated `TileRegistry` / `TilePluginManager` instances and register the tiles you need.
-2. Enter `with scoped_runtime(registry=..., plugins=...)` to override Tileable’s defaults.
-3. When the scope exits, the previous instances are restored automatically.
+Behind the scenes, the example registers tiles and plugins inside a `with
+scoped_runtime(...)` block and restores the previous defaults afterwards. Tests
+in `tests/test_advanced_examples.py` verify the isolation story.
 
 ## Coordinate multiple tiles
 
-`examples/multi_tile_workflow.py` demonstrates how two tiles can collaborate via shared state and services:
+`examples/multi_tile_workflow.py` demonstrates how two tiles collaborate via
+shared state and services:
 
 ```python
 from examples.multi_tile_workflow import run_multi_tile_workflow
 
 summary, state, events = run_multi_tile_workflow()
 
-print(summary)          # "notified:demo"
-print(state["log"])     # ["prepared:demo", "notified:demo"]
+print(summary)      # "notified:demo"
+print(state["log"]) # ["prepared:demo", "notified:demo"]
 print(events)
 ```
 
-Under the hood:
+The example—and its corresponding test in `tests/test_advanced_examples.py`—keep
+multi-tile coordination predictable.
 
-1. A preparation tile writes to shared state and emits a debug event.
-2. A follow-up tile reads the state, adds another entry, and emits its own event.
-3. Both invocations share the same `TileRegistry`, `EventBus`, and state dictionary, letting you orchestrate multi-step flows without extra infrastructure.
+## Orchestrate with events
 
-All of these advanced snippets are exercised in `tests/test_advanced_examples.py`, so you can copy them into your project with confidence. As your needs grow, assemble richer pipelines by composing more tiles—the core Tileable abstractions will keep things predictable and observable.
+Want branching and aggregation without a heavyweight orchestrator? See
+`examples/orchestration.py`, then copy the approach:
+
+1. Subscribe to `tile.completed` on an `EventBus`.
+2. Inspect the payload/result and decide which tile to call next.
+3. Pass along shared state/services so downstream tiles operate on the same
+   context.
+
+The pipeline is covered in `tests/test_examples.py`, proving that event flows
+are fully deterministic.
+
+## Installing contrib extras
+
+Many advanced recipes lean on contrib tiles. Install the extras when needed:
+
+```bash
+pip install tileable[logfire]
+pip install tileable[huey]
+```
+
+Then consult `docs/contrib.md` for structured telemetry, retry policies, replay
+seeds, or Huey-backed execution. Each capability is “just a tile”, so Create,
+Combine, Repeat remains the guiding principle.
